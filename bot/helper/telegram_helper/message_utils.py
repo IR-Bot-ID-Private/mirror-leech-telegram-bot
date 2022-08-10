@@ -85,6 +85,19 @@ def sendLogFile(bot, message: Message):
                           reply_to_message_id=message.message_id,
                           chat_id=message.chat_id)
 
+def sendFile(bot, message: Message, name: str, caption=""):
+    with open(name, 'rb') as f:
+        try:
+            bot.sendDocument(document=f, filename=f.name, reply_to_message_id=message.message_id,
+                             caption=caption, parse_mode='HTMl',chat_id=message.chat_id)
+        except RetryAfter as r:
+            LOGGER.warning(str(r))
+            sleep(r.retry_after * 1.5)
+            return sendFile(bot, message, name, caption)
+        except Exception as e:
+            LOGGER.error(str(e))
+            return
+
 def auto_delete_message(bot, cmd_message: Message, bot_message: Message):
     if AUTO_DELETE_MESSAGE_DURATION != -1:
         sleep(AUTO_DELETE_MESSAGE_DURATION)
@@ -106,10 +119,14 @@ def delete_all_messages():
 
 def update_all_messages(force=False):
     with status_reply_dict_lock:
-        if not force and (not status_reply_dict or not Interval or time() - list(status_reply_dict.values())[0][1] < 2):
+        if not force and (not status_reply_dict or not Interval or time() - list(status_reply_dict.values())[0][1] < 3):
             return
+        for chat_id in status_reply_dict:
+            status_reply_dict[chat_id][1] = time()
 
     msg, buttons = get_readable_message()
+    if msg is None:
+        return
     with status_reply_dict_lock:
         for chat_id in status_reply_dict:
             if status_reply_dict[chat_id] and msg != status_reply_dict[chat_id][0].text:
@@ -125,6 +142,8 @@ def update_all_messages(force=False):
 
 def sendStatusMessage(msg, bot):
     progress, buttons = get_readable_message()
+    if progress is None:
+        return
     with status_reply_dict_lock:
         if msg.chat.id in status_reply_dict:
             message = status_reply_dict[msg.chat.id][0]
